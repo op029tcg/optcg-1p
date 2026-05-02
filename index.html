@@ -17,6 +17,11 @@
        [Fix11] dpDoTrash() の testCards loc を 'trash_'+dpCurrentPlayer に統一
        [Fix12] initDonSystem() の document レベルリスナーを初回のみ登録
               （バトル再開のたびに重複登録されるリーク防止）
+     ★ v1.4 修正内容：
+       [Fix13] _trashAdd() で counter/cost/power を保持
+              （フィールド/手札 → トラッシュ → 手札 経由でカウンター表示が消える不具合を修正）
+       [Fix14] dpOpen() の dpState.hand 再構築時にも counter/cost/power を保持
+              （デッキパネル経由の往復でバッジ情報が欠落する不具合を修正）
 -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -653,7 +658,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 <div class="scr act" id="scrSelect">
   <div class="hd">
     <div class="logo"><em>OP</em>·TCG BATTLE</div>
-    <div class="logo-ver">SOLO v1.3</div>
+    <div class="logo-ver">SOLO v1.4</div>
   </div>
   <div class="body">
     <div class="pad">
@@ -2119,13 +2124,14 @@ function initCardSystem(){
       var handFromTest=testCards.filter(function(c){
         return dpCurrentPlayer==='p2'?c.loc==='hand_p2':c.loc==='hand';
       }).map(function(c){
-        return {id:c.id,face:true,name:c.name,img:c.img||c.image||''};
+        // ★ counter/cost/power も保持（デッキパネル経由でトラッシュ→手札復帰時のバッジ消失防止）
+        return {id:c.id,face:true,name:c.name,img:c.img||c.image||'',power:c.power||'',cost:c.cost,counter:c.counter};
       });
       if(handFromTest.length>0) state.hand=handFromTest;
     } else if(player==='p1'&&p1Hand.length){
-      state.hand=p1Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img};});
+      state.hand=p1Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img,power:c.power||'',cost:c.cost,counter:c.counter};});
     }else if(player==='p2'&&p2Hand.length){
-      state.hand=p2Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img};});
+      state.hand=p2Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img,power:c.power||'',cost:c.cost,counter:c.counter};});
     }
     dpReveal='none';dpSelectedCids=new Set();dpSelectedHcids=new Set();
     document.getElementById('dpPlayerLabel').textContent=player==='p1'?'P1':'P2';
@@ -3403,7 +3409,8 @@ function _lifeRemove(player){
 }
 function _trashAdd(player,c){
   // dpState.trash に追加しバッジ更新
-  var entry={id:'field_trash_'+c.id+'_'+Date.now(),face:true,name:c.name||'',img:c.img||''};
+  // ★ counter/cost/power を保持（トラッシュ→手札復帰時にバッジが消えるのを防ぐ）
+  var entry={id:'field_trash_'+c.id+'_'+Date.now(),face:true,name:c.name||'',img:c.img||'',power:c.power||'',cost:c.cost,counter:c.counter};
   dpState[player].trash.unshift(entry);
   tpUpdateTrashBadge(player,dpState[player].trash.length);
 }
