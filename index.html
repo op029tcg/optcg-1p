@@ -9,6 +9,14 @@
        [Fix5] onclick属性を全廃止 → DOMContentLoaded で addEventListener 登録
        [Fix6] updateIHBadges() を独立関数として定義
        [Fix7] renderHandScreen() 内の引き直しボタンを bindBtn() で登録
+     ★ v1.3 修正内容：
+       [Fix9]  assign() デッキ変更時に selectedStage を 'none' にリセット
+              （ENERU 以外のリーダーに切替時のステージ誤注入を防止）
+       [Fix10] dpOpen() で dpSelectedHcids もリセット
+              （デッキパネル再オープン時に前回の手札選択が残る不具合を修正）
+       [Fix11] dpDoTrash() の testCards loc を 'trash_'+dpCurrentPlayer に統一
+       [Fix12] initDonSystem() の document レベルリスナーを初回のみ登録
+              （バトル再開のたびに重複登録されるリーク防止）
 -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -645,7 +653,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 <div class="scr act" id="scrSelect">
   <div class="hd">
     <div class="logo"><em>OP</em>·TCG BATTLE</div>
-    <div class="logo-ver">SOLO v1.2</div>
+    <div class="logo-ver">SOLO v1.3</div>
   </div>
   <div class="body">
     <div class="pad">
@@ -1235,6 +1243,10 @@ function renderDeckList(){
 
 function assign(idx,player){
   if(player===1)p1Deck=decks[idx];else p2Deck=decks[idx];
+  // デッキ変更時に選択中のステージカードをリセット（ENERUリーダーでない場合の誤適用防止）
+  var pkey=player===1?'p1':'p2';
+  var newDeck=player===1?p1Deck:p2Deck;
+  if(!newDeck||newDeck.leader!==ENERU_LEADER_ID)selectedStage[pkey]='none';
   renderDeckList();updatePreviews();updateStartBtn();
 }
 
@@ -1416,7 +1428,7 @@ const donState={
   p1:{deck:10,active:0,rest:0,leader:0,char:[0,0,0,0,0]},
   p2:{deck:10,active:0,rest:0,leader:0,char:[0,0,0,0,0]}
 };
-let donDrag=null, donLastXY={x:0,y:0}, donGhostEl=null, donInitDone=false;
+let donDrag=null, donLastXY={x:0,y:0}, donGhostEl=null, donInitDone=false, donDocListenersDone=false;
 
 function donGetXY(e){
   if(e.changedTouches&&e.changedTouches[0])return{x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY};
@@ -1460,9 +1472,13 @@ function initDonSystem(){
       },{passive:false});
     })(p);
   });
-  document.addEventListener('mousemove',donMove);
-  document.addEventListener('touchmove',donMove,{passive:false});
-  document.addEventListener('mouseup',donEnd);
+  // documentレベルのリスナーは初回のみ登録（バトル再開時の二重登録防止）
+  if(!donDocListenersDone){
+    donDocListenersDone=true;
+    document.addEventListener('mousemove',donMove);
+    document.addEventListener('touchmove',donMove,{passive:false});
+    document.addEventListener('mouseup',donEnd);
+  }
   // ★ touchend donEndはグローバル登録しない（各ゾーンの独自touchendで処理）
 }
 
@@ -2111,7 +2127,7 @@ function initCardSystem(){
     }else if(player==='p2'&&p2Hand.length){
       state.hand=p2Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img};});
     }
-    dpReveal='none';dpSelectedCids=new Set();
+    dpReveal='none';dpSelectedCids=new Set();dpSelectedHcids=new Set();
     document.getElementById('dpPlayerLabel').textContent=player==='p1'?'P1':'P2';
     document.getElementById('deckOverlay').style.display='block';
     document.getElementById('deckPanelWrap').style.display='block';
@@ -2165,7 +2181,7 @@ function initCardSystem(){
   function dpDoTrash(cid){
     var d=dpState[dpCurrentPlayer];var i=dpFindById(cid);if(i<0)return;
     var c=d.deck.splice(i,1)[0];c.face=true;d.trash.unshift(c);
-    testCards.push({id:'dp_trash_'+cid,name:c.name||'NO.'+cid,img:c.img,rested:false,donCount:0,loc:'trash'});
+    testCards.push({id:'dp_trash_'+cid,name:c.name||'NO.'+cid,img:c.img,rested:false,donCount:0,loc:'trash_'+dpCurrentPlayer});
     dpRefresh();
   }
   function dpDoHand(cid){
