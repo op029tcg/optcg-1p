@@ -17,6 +17,18 @@
        [Fix11] dpDoTrash() の testCards loc を 'trash_'+dpCurrentPlayer に統一
        [Fix12] initDonSystem() の document レベルリスナーを初回のみ登録
               （バトル再開のたびに重複登録されるリーク防止）
+     ★ v1.4 修正内容：
+       [Fix13] _trashAdd() で counter/cost/power を保持
+              （フィールド/手札 → トラッシュ → 手札 経由でカウンター表示が消える不具合を修正）
+       [Fix14] dpOpen() の dpState.hand 再構築時にも counter/cost/power を保持
+              （デッキパネル経由の往復でバッジ情報が欠落する不具合を修正）
+     ★ v1.5 新機能：
+       [Feat1] 攻撃シミュレーション機能を追加（ターンバーの ⚙ ボタン）
+              - アクティブなリーダー＋キャラのアタック回数と合計パワーを試算
+              - 各アタッカーの DON 配分を +/- で仮想的に変更可能（実状態は不変）
+              - 「💤」ボタンで召喚酔いを設定→計算から除外
+              - 残DON は +1000/枚で合計に加算（攻撃時に振れる前提）
+              - 召喚酔い設定はモーダルを閉じる度にリセット（次ターンに持ち越さない）
 -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -537,6 +549,41 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 .cd-sbtn.on-act{background:rgba(37,99,235,.85);color:#fff;border-color:rgba(37,99,235,.6)}
 .cd-sbtn.on-eff{background:rgba(147,51,234,.85);color:#fff;border-color:rgba(147,51,234,.6)}
 .cd-sbtn.on-lock{background:rgba(234,179,8,.9);color:#000;border-color:rgba(234,179,8,.7);font-weight:900}
+
+/* ═══ ATTACK CALC POPUP ═══ */
+#atkCalcOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:330;align-items:center;justify-content:center;padding:12px;}
+#atkCalcOverlay.open{display:flex}
+#atkCalcPanel{width:100%;max-width:420px;max-height:92vh;overflow-y:auto;background:#0f1520;border-radius:16px;border:1px solid rgba(212,168,32,.3);box-shadow:0 12px 40px rgba(0,0,0,.7);}
+#atkCalcHd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:#0f1520;z-index:2;}
+#atkCalcTitle{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:#d4a820;flex:1;}
+#atkCalcClose{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:#dde4f0;font-size:16px;cursor:pointer;}
+.ac-player{padding:10px 14px 14px;border-bottom:1px solid rgba(255,255,255,.06);}
+.ac-player:last-child{border-bottom:none}
+.ac-phd{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.ac-pbadge{font-size:10px;font-weight:900;padding:3px 9px;border-radius:20px;}
+.ac-pbadge.p1{background:var(--p1);color:#fff}
+.ac-pbadge.p2{background:var(--p2);color:#fff}
+.ac-psummary{flex:1;font-family:'DM Mono',monospace;font-size:11px;color:#dde4f0;}
+.ac-psummary .ac-num{color:#d4a820;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;}
+.ac-row{display:flex;align-items:center;gap:6px;padding:8px 6px;border-radius:8px;background:rgba(255,255,255,.03);margin-bottom:5px;border:1px solid rgba(255,255,255,.06);}
+.ac-row.sick{opacity:.45;background:rgba(120,120,120,.06);}
+.ac-row.inactive{opacity:.35;background:rgba(80,80,80,.04);}
+.ac-sick{width:22px;height:22px;border-radius:6px;border:1.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.03);display:flex;align-items:center;justify-content:center;font-size:13px;color:#d4a820;flex-shrink:0;cursor:pointer;}
+.ac-sick.on{background:rgba(212,168,32,.2);border-color:#d4a820;}
+.ac-name{flex:1;min-width:0;font-size:11px;font-weight:700;color:#dde4f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ac-name .ac-base{display:block;font-size:9px;color:#8a8070;font-family:'DM Mono',monospace;font-weight:400;}
+.ac-don-ctrl{display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.ac-donbtn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(212,168,32,.3);background:rgba(212,168,32,.08);color:#d4a820;font-size:14px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;}
+.ac-donbtn:active{transform:scale(.92)}
+.ac-donbtn.dis{opacity:.25;pointer-events:none;}
+.ac-doncnt{min-width:22px;text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:#dde4f0;}
+.ac-total{min-width:54px;text-align:right;font-family:'Bebas Neue',sans-serif;font-size:15px;color:#dde4f0;letter-spacing:1px;flex-shrink:0;}
+.ac-pool{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(212,168,32,.06);border-radius:8px;margin-top:8px;border:1px dashed rgba(212,168,32,.25);}
+.ac-pool-lbl{font-size:10px;color:#8a8070;font-family:'DM Mono',monospace;}
+.ac-pool-val{font-family:'Bebas Neue',sans-serif;font-size:14px;color:#d4a820;letter-spacing:1px;}
+.ac-empty{font-size:11px;color:#5a6a84;text-align:center;padding:14px 0;}
+.ac-foot{padding:8px 14px 14px;font-size:9px;color:#5a6a84;text-align:center;line-height:1.5;}
+
 /* フィールドステータスタグ */
 .field-stag{position:absolute;z-index:6;font-size:5px;font-weight:900;color:#fff;padding:1px 3px;border-radius:6px;pointer-events:none}
 .field-stag.f-atk{background:rgba(220,60,60,.85)}
@@ -653,7 +700,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 <div class="scr act" id="scrSelect">
   <div class="hd">
     <div class="logo"><em>OP</em>·TCG BATTLE</div>
-    <div class="logo-ver">SOLO v1.3</div>
+    <div class="logo-ver">SOLO v1.5</div>
   </div>
   <div class="body">
     <div class="pad">
@@ -860,7 +907,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
     <!-- ターンバー -->
     <div class="turn-bar">
       <div class="tbn" id="btnExitBattle">✕</div>
-      <div class="tbn">⚙</div>
+      <div class="tbn" id="btnAtkCalc">⚙</div>
       <div class="tbn">↺</div>
       <div class="tbn" id="btnUndo">⏮</div>
       <div class="tbn-sep"></div>
@@ -2119,13 +2166,14 @@ function initCardSystem(){
       var handFromTest=testCards.filter(function(c){
         return dpCurrentPlayer==='p2'?c.loc==='hand_p2':c.loc==='hand';
       }).map(function(c){
-        return {id:c.id,face:true,name:c.name,img:c.img||c.image||''};
+        // ★ counter/cost/power も保持（デッキパネル経由でトラッシュ→手札復帰時のバッジ消失防止）
+        return {id:c.id,face:true,name:c.name,img:c.img||c.image||'',power:c.power||'',cost:c.cost,counter:c.counter};
       });
       if(handFromTest.length>0) state.hand=handFromTest;
     } else if(player==='p1'&&p1Hand.length){
-      state.hand=p1Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img};});
+      state.hand=p1Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img,power:c.power||'',cost:c.cost,counter:c.counter};});
     }else if(player==='p2'&&p2Hand.length){
-      state.hand=p2Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img};});
+      state.hand=p2Hand.map(function(c,i){return{id:i+1,face:true,name:c.name,img:c.image||c.img,power:c.power||'',cost:c.cost,counter:c.counter};});
     }
     dpReveal='none';dpSelectedCids=new Set();dpSelectedHcids=new Set();
     document.getElementById('dpPlayerLabel').textContent=player==='p1'?'P1':'P2';
@@ -3403,7 +3451,8 @@ function _lifeRemove(player){
 }
 function _trashAdd(player,c){
   // dpState.trash に追加しバッジ更新
-  var entry={id:'field_trash_'+c.id+'_'+Date.now(),face:true,name:c.name||'',img:c.img||''};
+  // ★ counter/cost/power を保持（トラッシュ→手札復帰時にバッジが消えるのを防ぐ）
+  var entry={id:'field_trash_'+c.id+'_'+Date.now(),face:true,name:c.name||'',img:c.img||'',power:c.power||'',cost:c.cost,counter:c.counter};
   dpState[player].trash.unshift(entry);
   tpUpdateTrashBadge(player,dpState[player].trash.length);
 }
@@ -3549,6 +3598,154 @@ function moveCard(id,targetEl){
 }
 
 // ══════════════════════════════════════════════════════
+// ATTACK CALC（攻撃シミュレーション）
+//   ターン中、リーダー＋アクティブキャラのアタック回数と
+//   合計パワーを試算するモーダル。
+//   - 開く度に donState から sim 状態を初期化（実状態は変更しない）
+//   - +/- で各アタッカーの DON 配分を仮想的に変更
+//   - 「💤 召喚酔い」で当該アタッカーを除外（再計算）
+//   - 残DONは +1000/枚 として合計に加算（攻撃時に振れる前提）
+// ══════════════════════════════════════════════════════
+var atkSim={p1:null,p2:null};
+
+function atkBuildSim(p){
+  var ds=donState[p];
+  if(!ds)return null;
+  var totalDon=(ds.leader||0)+(ds.char||[0,0,0,0,0]).reduce(function(s,v){return s+(v||0);},0)+(ds.active||0);
+  var lc=testCards.find(function(x){return x.id==='leader_'+p;});
+  var leaderActive=!ldrRested[p];
+  var leaderBase=lc?(parseInt(lc.power)||5000)+(lc.modPower||0):5000;
+  var leaderName=lc?(lc.name||'リーダー'):'リーダー';
+  var chars=[];
+  for(var i=0;i<5;i++){
+    var c=testCards.find(function(x){return x.loc==='field_'+p+'_'+i;});
+    if(c){
+      chars.push({
+        idx:i,exists:true,active:!c.rested,sick:false,
+        base:(parseInt(c.power)||0)+(c.modPower||0),
+        name:c.name||('キャラ'+(i+1)),
+        sim_don:ds.char[i]||0
+      });
+    }
+  }
+  return {
+    totalDon:totalDon,
+    leader:{exists:true,active:leaderActive,sick:false,base:leaderBase,name:leaderName,sim_don:ds.leader||0},
+    chars:chars
+  };
+}
+
+function atkAttackers(s){
+  var arr=[];
+  if(s.leader.exists&&s.leader.active&&!s.leader.sick)arr.push(s.leader);
+  s.chars.forEach(function(c){if(c.exists&&c.active&&!c.sick)arr.push(c);});
+  return arr;
+}
+
+function atkPool(s){
+  var used=0;
+  var atk=atkAttackers(s);
+  atk.forEach(function(a){used+=a.sim_don;});
+  return Math.max(0,s.totalDon-used);
+}
+
+function atkRenderPlayer(p){
+  var el=document.getElementById('atkCalc'+(p==='p1'?'P1':'P2'));
+  if(!el)return;
+  var s=atkSim[p];
+  if(!s){el.innerHTML='';return;}
+  var attackers=atkAttackers(s);
+  var atkCount=attackers.length;
+  var pool=atkPool(s);
+  var totalPower=0;
+  attackers.forEach(function(a){totalPower+=a.base+a.sim_don*1000;});
+  totalPower+=pool*1000;
+
+  var html='<div class="ac-phd">'
+    +'<span class="ac-pbadge '+p+'">'+(p==='p1'?'Player 1':'Player 2')+'</span>'
+    +'<span class="ac-psummary">攻撃 <span class="ac-num">×'+atkCount+'</span> / 合計 <span class="ac-num">'+totalPower.toLocaleString()+'</span></span>'
+    +'</div>';
+
+  function rowHTML(a,kind,idx){
+    var inactive=!a.active;
+    var disMinus=a.sim_don<=0?'dis':'';
+    var disPlus=pool<=0?'dis':'';
+    var key=kind+(idx!=null?('_'+idx):'');
+    var line=a.base+a.sim_don*1000;
+    return '<div class="ac-row'+(a.sick?' sick':'')+(inactive?' inactive':'')+'">'
+      +'<div class="ac-sick'+(a.sick?' on':'')+'" data-ac-sick="'+p+':'+key+'">💤</div>'
+      +'<div class="ac-name">'+(a.name||(kind==='leader'?'リーダー':'キャラ'))
+        +'<span class="ac-base">'+(inactive&&!a.sick?'(レスト中)':('基礎 '+a.base.toLocaleString()))+'</span></div>'
+      +'<div class="ac-don-ctrl">'
+        +'<button class="ac-donbtn '+disMinus+'" data-ac-don="'+p+':'+key+':-1">−</button>'
+        +'<div class="ac-doncnt">DON×'+a.sim_don+'</div>'
+        +'<button class="ac-donbtn '+disPlus+'" data-ac-don="'+p+':'+key+':1">＋</button>'
+      +'</div>'
+      +'<div class="ac-total">'+(a.sick||inactive?'—':line.toLocaleString())+'</div>'
+    +'</div>';
+  }
+
+  var anyExists=s.leader.exists||s.chars.length>0;
+  if(!anyExists){html+='<div class="ac-empty">アタッカーがいません</div>';}
+  else{
+    html+=rowHTML(s.leader,'leader');
+    s.chars.forEach(function(c){html+=rowHTML(c,'char',c.idx);});
+  }
+  html+='<div class="ac-pool">'
+    +'<span class="ac-pool-lbl">残DON (+1000/枚で合計加算)</span>'
+    +'<span class="ac-pool-val">'+pool+' / '+s.totalDon+'</span>'
+  +'</div>';
+  el.innerHTML=html;
+
+  el.querySelectorAll('[data-ac-sick]').forEach(function(b){
+    var t=false;
+    b.addEventListener('touchend',function(e){e.preventDefault();e.stopPropagation();t=true;atkToggleSick(b.getAttribute('data-ac-sick'));setTimeout(function(){t=false;},300);},{passive:false});
+    b.addEventListener('click',function(){if(!t)atkToggleSick(b.getAttribute('data-ac-sick'));});
+  });
+  el.querySelectorAll('[data-ac-don]').forEach(function(b){
+    if(b.classList.contains('dis'))return;
+    var t=false;
+    b.addEventListener('touchend',function(e){e.preventDefault();e.stopPropagation();t=true;atkAdjustDon(b.getAttribute('data-ac-don'));setTimeout(function(){t=false;},300);},{passive:false});
+    b.addEventListener('click',function(){if(!t)atkAdjustDon(b.getAttribute('data-ac-don'));});
+  });
+}
+
+function atkFindAttacker(p,key){
+  var s=atkSim[p];if(!s)return null;
+  if(key==='leader')return s.leader;
+  var m=key.match(/^char_(\d+)$/);
+  if(m){var idx=parseInt(m[1]);return s.chars.find(function(c){return c.idx===idx;});}
+  return null;
+}
+function atkToggleSick(spec){
+  var parts=spec.split(':');var p=parts[0],key=parts[1];
+  var a=atkFindAttacker(p,key);if(!a)return;
+  a.sick=!a.sick;
+  // 召喚酔いONにしたら sim_don は 0 にして残DONプールに戻す
+  if(a.sick)a.sim_don=0;
+  atkRenderPlayer(p);
+}
+function atkAdjustDon(spec){
+  var parts=spec.split(':');var p=parts[0],key=parts[1],delta=parseInt(parts[2]);
+  var a=atkFindAttacker(p,key);if(!a||a.sick||!a.active)return;
+  var s=atkSim[p];
+  if(delta>0&&atkPool(s)<=0)return;
+  if(delta<0&&a.sim_don<=0)return;
+  a.sim_don+=delta;
+  atkRenderPlayer(p);
+}
+function atkCalcOpen(){
+  atkSim.p1=atkBuildSim('p1');
+  atkSim.p2=atkBuildSim('p2');
+  atkRenderPlayer('p1');
+  atkRenderPlayer('p2');
+  document.getElementById('atkCalcOverlay').classList.add('open');
+}
+function atkCalcClose(){
+  document.getElementById('atkCalcOverlay').classList.remove('open');
+}
+
+// ══════════════════════════════════════════════════════
 // ★[Fix5] DOMContentLoaded で全イベントを一括登録
 //         onclick属性を完全廃止
 // ══════════════════════════════════════════════════════
@@ -3634,6 +3831,15 @@ document.addEventListener('DOMContentLoaded',function(){
   // バトル画面
   bindBtn('btnNextTurn', nextTurn);
   bindBtn('btnUndo', undoState);
+  // 攻撃シミュレーション
+  bindBtn('btnAtkCalc', atkCalcOpen);
+  bindBtn('atkCalcClose', atkCalcClose);
+  var atkOv=document.getElementById('atkCalcOverlay');
+  if(atkOv){
+    var atkOvT=false;
+    atkOv.addEventListener('touchend',function(e){if(e.target===atkOv){e.preventDefault();atkOvT=true;atkCalcClose();setTimeout(function(){atkOvT=false;},300);}},{passive:false});
+    atkOv.addEventListener('click',function(e){if(!atkOvT&&e.target===atkOv)atkCalcClose();});
+  }
 
   // ✕ボタン → 確認モーダル
   bindBtn('btnExitBattle', function(){
@@ -3899,6 +4105,19 @@ document.addEventListener('DOMContentLoaded',function(){
       <button class="cd-sbtn" id="cdEff">効果 ✕</button>
       <button class="cd-sbtn" id="cdLock">🔓 固定</button>
     </div>
+  </div>
+</div>
+
+<!-- ═══ ATTACK CALC POPUP ═══ -->
+<div id="atkCalcOverlay">
+  <div id="atkCalcPanel">
+    <div id="atkCalcHd">
+      <div id="atkCalcTitle">⚔ ATTACK SIM</div>
+      <button id="atkCalcClose">✕</button>
+    </div>
+    <div id="atkCalcP1" class="ac-player"></div>
+    <div id="atkCalcP2" class="ac-player"></div>
+    <div class="ac-foot">基礎パワー + 付与DON×1000 + 残DON×1000<br>「💤」= 召喚酔い設定（このターンのみ・計算から除外）</div>
   </div>
 </div>
 </body>
