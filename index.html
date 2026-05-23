@@ -29,6 +29,10 @@
               - 「💤」ボタンで召喚酔いを設定→計算から除外
               - 残DON は +1000/枚で合計に加算（攻撃時に振れる前提）
               - 召喚酔い設定はモーダルを閉じる度にリセット（次ターンに持ち越さない）
+     ★ v1.6 機能追加：
+       [Feat2] 攻撃シミュレーションに手札カウンター合計を表示
+              - 各プレイヤー欄に「手札カウンター合計 (N/M枚): XXXX」を追加
+              - 防御側がライフ受けかカウンター切るかを判断する材料として利用
 -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -581,6 +585,8 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 .ac-pool{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(212,168,32,.06);border-radius:8px;margin-top:8px;border:1px dashed rgba(212,168,32,.25);}
 .ac-pool-lbl{font-size:10px;color:#8a8070;font-family:'DM Mono',monospace;}
 .ac-pool-val{font-family:'Bebas Neue',sans-serif;font-size:14px;color:#d4a820;letter-spacing:1px;}
+.ac-counter{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(37,99,235,.08);border-radius:8px;margin-top:5px;border:1px dashed rgba(37,99,235,.3);}
+.ac-counter-val{font-family:'Bebas Neue',sans-serif;font-size:14px;color:#93c5fd;letter-spacing:1px;}
 .ac-empty{font-size:11px;color:#5a6a84;text-align:center;padding:14px 0;}
 .ac-foot{padding:8px 14px 14px;font-size:9px;color:#5a6a84;text-align:center;line-height:1.5;}
 
@@ -700,7 +706,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 <div class="scr act" id="scrSelect">
   <div class="hd">
     <div class="logo"><em>OP</em>·TCG BATTLE</div>
-    <div class="logo-ver">SOLO v1.5</div>
+    <div class="logo-ver">SOLO v1.6</div>
   </div>
   <div class="body">
     <div class="pad">
@@ -3649,6 +3655,18 @@ function atkPool(s){
   return Math.max(0,s.totalDon-used);
 }
 
+function atkHandCounter(p){
+  var loc=p==='p2'?'hand_p2':'hand';
+  var total=0,ctrCnt=0,handCnt=0;
+  testCards.forEach(function(c){
+    if(c.loc!==loc)return;
+    handCnt++;
+    var v=c.counter!=null?(parseInt(c.counter)||0):0;
+    if(v>0){total+=v;ctrCnt++;}
+  });
+  return {total:total,ctrCnt:ctrCnt,handCnt:handCnt};
+}
+
 function atkRenderPlayer(p){
   var el=document.getElementById('atkCalc'+(p==='p1'?'P1':'P2'));
   if(!el)return;
@@ -3694,6 +3712,12 @@ function atkRenderPlayer(p){
   html+='<div class="ac-pool">'
     +'<span class="ac-pool-lbl">残DON (+1000/枚で合計加算)</span>'
     +'<span class="ac-pool-val">'+pool+' / '+s.totalDon+'</span>'
+  +'</div>';
+  // 手札カウンター合計（防御側の判断材料）
+  var hc=atkHandCounter(p);
+  html+='<div class="ac-counter">'
+    +'<span class="ac-pool-lbl">手札カウンター合計 ('+hc.ctrCnt+'/'+hc.handCnt+'枚)</span>'
+    +'<span class="ac-counter-val">'+hc.total.toLocaleString()+'</span>'
   +'</div>';
   el.innerHTML=html;
 
