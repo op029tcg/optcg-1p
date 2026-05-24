@@ -33,6 +33,22 @@
        [Feat2] 攻撃シミュレーションに手札カウンター合計を表示
               - 各プレイヤー欄に「手札カウンター合計 (N/M枚): XXXX」を追加
               - 防御側がライフ受けかカウンター切るかを判断する材料として利用
+     ★ v1.7 技術向上モード（3機能）：
+       [Feat3] ⑦ ライフ受け判断アシスト
+              - Attack Sim ポップアップ下部に「🛡 攻防シミュレーション」を追加
+              - P1→P2 / P2→P1 双方向で、各攻撃ごとの必要カウンター値を表示
+              - 合計必要カウンター vs 手札カウンター合計で「全防御可能 / 不足」判定
+       [Feat4] ① ターンログ & 振り返り（ターンバー ↺ ボタン）
+              - 各ターンの開始/終了タイムスタンプ・経過時間を自動記録
+              - ターンごとにメモ入力可能（気づき・反省点）
+              - 現ターン + 過去全ターン履歴を表示・編集可能
+              - exit時にリセット
+       [Feat5] ⑤ シナリオ問題集（詰めワンピース）
+              - デッキ選択画面の「📚 シナリオ問題集」から起動
+              - 易/中/難 3問の OP15 エネル系リーサル詰め問題を収録
+              - 盤面（手札・フィールド・DON・ライフ）を自動セット
+              - バトル画面上部に問題説明 + ヒント/解答ボタン
+              - 「退出」で通常画面に戻る
 -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -587,6 +603,93 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 .ac-pool-val{font-family:'Bebas Neue',sans-serif;font-size:14px;color:#d4a820;letter-spacing:1px;}
 .ac-counter{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(37,99,235,.08);border-radius:8px;margin-top:5px;border:1px dashed rgba(37,99,235,.3);}
 .ac-counter-val{font-family:'Bebas Neue',sans-serif;font-size:14px;color:#93c5fd;letter-spacing:1px;}
+
+/* 攻防シミュレーション */
+#atkCalcDefense{padding:0 14px 4px;}
+.ac-def-title{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:#d4a820;padding:14px 0 8px;border-top:1px solid rgba(212,168,32,.18);margin-top:4px;}
+.ac-def-block{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:10px;margin-bottom:8px;}
+.ac-def-hd{font-size:11px;font-weight:900;color:#dde4f0;margin-bottom:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.ac-def-pool{font-size:9px;color:#d4a820;font-family:'DM Mono',monospace;font-weight:400;}
+.ac-def-meta{font-size:10px;color:#8a8070;font-family:'DM Mono',monospace;margin-bottom:6px;}
+.ac-def-row{display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:11px;border-radius:6px;}
+.ac-def-row + .ac-def-row{margin-top:2px;}
+.ac-def-rank{width:18px;height:18px;border-radius:50%;background:rgba(212,168,32,.18);color:#d4a820;font-family:'Bebas Neue',sans-serif;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ac-def-name{flex:1;min-width:0;color:#dde4f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ac-def-power{font-family:'Bebas Neue',sans-serif;font-size:13px;color:#dde4f0;letter-spacing:1px;flex-shrink:0;min-width:50px;text-align:right;}
+.ac-def-needed{font-family:'DM Mono',monospace;font-size:10px;color:#93c5fd;flex-shrink:0;min-width:80px;text-align:right;}
+.ac-def-needed.miss{color:#5a6a84;}
+.ac-def-needed.kill{color:#f87171;font-weight:900;}
+.ac-def-verdict{margin-top:8px;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:700;text-align:center;}
+.ac-def-verdict.ok{background:rgba(22,163,74,.15);color:#4ade80;border:1px solid rgba(22,163,74,.4);}
+.ac-def-verdict.ng{background:rgba(220,38,38,.12);color:#f87171;border:1px solid rgba(220,38,38,.35);}
+.ac-def-verdict.none{background:rgba(255,255,255,.04);color:#5a6a84;border:1px solid rgba(255,255,255,.08);}
+
+/* ═══ ① TURN LOG ═══ */
+#tlOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:340;align-items:center;justify-content:center;padding:12px;}
+#tlOverlay.open{display:flex}
+#tlPanel{width:100%;max-width:420px;max-height:88vh;display:flex;flex-direction:column;background:#0f1520;border-radius:16px;border:1px solid rgba(212,168,32,.3);box-shadow:0 12px 40px rgba(0,0,0,.7);overflow:hidden;}
+#tlHd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.08);}
+#tlTitle{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:#d4a820;flex:1;}
+#tlClose{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:#dde4f0;font-size:16px;cursor:pointer;}
+#tlCurrent{padding:12px 14px;background:rgba(212,168,32,.06);border-bottom:1px solid rgba(255,255,255,.06);}
+.tl-cur-hd{font-size:9px;font-family:'DM Mono',monospace;color:#8a8070;letter-spacing:2px;margin-bottom:6px;}
+.tl-cur-info{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.tl-turn{font-family:'Bebas Neue',sans-serif;font-size:18px;color:#d4a820;letter-spacing:1px;}
+.tl-who{font-size:10px;font-weight:900;padding:3px 8px;border-radius:14px;}
+.tl-who.sen{background:rgba(220,38,38,.18);color:#f87171;border:1px solid rgba(220,38,38,.3);}
+.tl-who.go{background:rgba(255,255,255,.06);color:#dde4f0;border:1px solid rgba(255,255,255,.12);}
+.tl-dur{font-family:'DM Mono',monospace;font-size:12px;color:#dde4f0;margin-left:auto;}
+.tl-memo-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:6px 8px;color:#dde4f0;font-size:11px;font-family:'Noto Sans JP',sans-serif;resize:vertical;outline:none;line-height:1.4;}
+.tl-memo-input:focus{border-color:rgba(212,168,32,.5);background:rgba(255,255,255,.07);}
+#tlList{flex:1;overflow-y:auto;padding:10px 14px 14px;-webkit-overflow-scrolling:touch;}
+.tl-row{padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+.tl-row:last-child{border-bottom:none;}
+.tl-row-hd{display:flex;align-items:center;gap:10px;margin-bottom:5px;}
+.tl-empty{padding:24px 0;text-align:center;color:#5a6a84;font-size:11px;}
+
+/* ═══ ⑤ SCENARIO ═══ */
+#scOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:340;align-items:center;justify-content:center;padding:14px;}
+#scOverlay.open{display:flex}
+#scPanel{width:100%;max-width:440px;max-height:88vh;display:flex;flex-direction:column;background:#0f1520;border-radius:16px;border:1px solid rgba(212,168,32,.3);box-shadow:0 12px 40px rgba(0,0,0,.7);overflow:hidden;}
+#scHd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.08);}
+#scTitle{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:#d4a820;flex:1;}
+#scTitleSub{font-size:9px;color:#8a8070;font-family:'DM Mono',monospace;}
+#scClose{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:#dde4f0;font-size:16px;cursor:pointer;}
+#scList{flex:1;overflow-y:auto;padding:10px 14px 14px;}
+.sc-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:all .14s;}
+.sc-card:active{background:rgba(212,168,32,.1);border-color:rgba(212,168,32,.45);transform:scale(.985);}
+.sc-hd{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.sc-title{font-size:13px;font-weight:700;color:#dde4f0;}
+.sc-desc{font-size:10px;color:#8a8070;line-height:1.5;}
+.sc-diff{font-size:9px;font-weight:900;padding:2px 7px;border-radius:10px;letter-spacing:.5px;}
+.sc-diff-易{background:rgba(22,163,74,.18);color:#4ade80;border:1px solid rgba(22,163,74,.4);}
+.sc-diff-中{background:rgba(212,168,32,.18);color:#d4a820;border:1px solid rgba(212,168,32,.45);}
+.sc-diff-難{background:rgba(220,38,38,.18);color:#f87171;border:1px solid rgba(220,38,38,.4);}
+
+/* シナリオ中ゲーム内オーバーレイ（半透明・最小化可） */
+#scInGameOverlay{display:none;position:fixed;top:0;left:0;right:0;z-index:120;padding:calc(var(--st) + 4px) 8px 6px;background:linear-gradient(180deg,rgba(8,12,20,.95),rgba(8,12,20,.7));flex-direction:column;}
+#scInGameContent{background:rgba(15,21,32,.92);border:1px solid rgba(212,168,32,.35);border-radius:10px;padding:8px 10px;box-shadow:0 4px 16px rgba(0,0,0,.5);}
+.sc-ig-title{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:900;color:#dde4f0;}
+.sc-ig-desc{font-size:9px;color:#8a8070;margin-top:3px;line-height:1.4;}
+.sc-ig-btns{display:flex;gap:5px;margin-top:6px;}
+.sc-ig-btn{flex:1;padding:5px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#dde4f0;font-size:10px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif;}
+.sc-ig-btn:active{transform:scale(.95);opacity:.85;}
+.sc-btn-hint{background:rgba(212,168,32,.15);color:#d4a820;border-color:rgba(212,168,32,.4);}
+.sc-btn-sol{background:rgba(37,99,235,.15);color:#93c5fd;border-color:rgba(37,99,235,.4);}
+.sc-btn-quit{background:rgba(220,38,38,.12);color:#f87171;border-color:rgba(220,38,38,.35);}
+.sc-ig-hint-box{margin-top:6px;padding:6px 8px;background:rgba(212,168,32,.08);border:1px solid rgba(212,168,32,.3);border-radius:6px;font-size:10px;color:#dde4f0;line-height:1.5;}
+.sc-ig-hint-box ol{padding-left:18px;margin-top:3px;}
+.sc-ig-hint-box li{margin-bottom:3px;}
+
+/* デッキ選択画面 シナリオエントリ */
+.sc-entry-btn{
+  width:100%;padding:10px 14px;border-radius:10px;
+  border:1px solid rgba(212,168,32,.35);background:rgba(212,168,32,.08);
+  color:#d4a820;font-size:12px;font-weight:700;cursor:pointer;
+  margin-bottom:10px;display:flex;align-items:center;gap:8px;justify-content:center;
+  transition:all .14s;font-family:'Noto Sans JP',sans-serif;
+}
+.sc-entry-btn:active{background:rgba(212,168,32,.18);transform:scale(.985);}
 .ac-empty{font-size:11px;color:#5a6a84;text-align:center;padding:14px 0;}
 .ac-foot{padding:8px 14px 14px;font-size:9px;color:#5a6a84;text-align:center;line-height:1.5;}
 
@@ -706,7 +809,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 <div class="scr act" id="scrSelect">
   <div class="hd">
     <div class="logo"><em>OP</em>·TCG BATTLE</div>
-    <div class="logo-ver">SOLO v1.6</div>
+    <div class="logo-ver">SOLO v1.7</div>
   </div>
   <div class="body">
     <div class="pad">
@@ -726,6 +829,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
         </div>
       </div>
       <button class="reset-btn" id="btnImportReset">🗑 インポートリセット</button>
+      <button class="sc-entry-btn" id="btnScenarioOpen">📚 シナリオ問題集 (詰めワンピース)</button>
       <input type="file" id="impFileP1" accept=".json" style="display:none">
       <input type="file" id="impFileP2" accept=".json" style="display:none">
 
@@ -914,7 +1018,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
     <div class="turn-bar">
       <div class="tbn" id="btnExitBattle">✕</div>
       <div class="tbn" id="btnAtkCalc">⚙</div>
-      <div class="tbn">↺</div>
+      <div class="tbn" id="btnTurnLog">↺</div>
       <div class="tbn" id="btnUndo">⏮</div>
       <div class="tbn-sep"></div>
       <div class="turn-chip">
@@ -1003,17 +1107,270 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 //        initCardSystem() 内に埋まっていたため③ボタン時に未定義になっていた
 // ══════════════════════════════════════════════════════
 var DP_CARDS=[
-  {name:"神の裁き", id:"OP15-075", img:""},
-  {name:"ゲダツ",   id:"OP15-063", img:""},
-  {name:"アマゾン", id:"OP15-059", img:""},
-  {name:"コトリ",   id:"OP15-064", img:""},
-  {name:"ゴロー",   id:"OP15-065", img:""},
-  {name:"神兵",     id:"OP15-068", img:""},
-  {name:"ノラ",     id:"OP15-069", img:""},
-  {name:"フザ",     id:"OP15-070", img:""},
-  {name:"ホーリー", id:"OP15-071", img:""},
-  {name:"ヤマ",     id:"OP15-073", img:""},
+  {name:"神の裁き", id:"OP15-075", img:"", power:"",   cost:0, counter:0},
+  {name:"ゲダツ",   id:"OP15-063", img:"", power:"3000", cost:2, counter:1000},
+  {name:"アマゾン", id:"OP15-059", img:"", power:"2000", cost:1, counter:1000},
+  {name:"コトリ",   id:"OP15-064", img:"", power:"2000", cost:1, counter:2000},
+  {name:"ゴロー",   id:"OP15-065", img:"", power:"3000", cost:2, counter:1000},
+  {name:"神兵",     id:"OP15-068", img:"", power:"5000", cost:3, counter:1000},
+  {name:"ノラ",     id:"OP15-069", img:"", power:"4000", cost:3, counter:1000},
+  {name:"フザ",     id:"OP15-070", img:"", power:"5000", cost:4, counter:1000},
+  {name:"ホーリー", id:"OP15-071", img:"", power:"5000", cost:4, counter:2000},
+  {name:"ヤマ",     id:"OP15-073", img:"", power:"6000", cost:5, counter:1000},
 ];
+
+// ══════════════════════════════════════════════════════
+// ⑤ シナリオ問題集（詰めワンピース）
+//   特定盤面を再現し、ユーザーがリーサルを組み立てる訓練モード。
+//   DP_CARDS をベースに状態を構築。
+// ══════════════════════════════════════════════════════
+var SCENARIOS=[
+  {
+    id:'sc1',
+    title:'雷鳴の止め',
+    difficulty:'易',
+    description:'相手リーダーLP1。アクティブキャラ1体とリーダーで詰めよ。',
+    hint:'カウンター1000をどこに当てさせるか考える。同値で潰そう。',
+    p1:{
+      life:3,
+      hand:['OP15-059'],
+      fieldChars:[{slot:0,cardId:'OP15-071',dons:0,rested:false}],
+      leaderDons:2, activeDons:0,
+      leaderRested:false
+    },
+    p2:{
+      life:1,
+      handCount:2, handCounter:1000,
+      fieldChars:[],
+      leaderRested:false
+    },
+    battleTurn:5, p1First:true,
+    optimalSolution:[
+      'ホーリー(5000)でリーダーアタック → 相手1000カウンター→6000でも防御不成立 (※同値負け)。ライフ1→0',
+      'エネル(5000+DON2=7000)でリーダーアタック → 残カウンター0で素受け、ライフ0なので敗北'
+    ]
+  },
+  {
+    id:'sc2',
+    title:'神兵の先陣',
+    difficulty:'中',
+    description:'アタッカー2体+リーダー。順序を誤ると相手のカウンター2000で1発止まる。',
+    hint:'相手が一番受けやすい同値帯から先に投げてカウンターを吐かせる。',
+    p1:{
+      life:2,
+      hand:[],
+      fieldChars:[
+        {slot:0,cardId:'OP15-068',dons:1,rested:false},
+        {slot:1,cardId:'OP15-065',dons:2,rested:false}
+      ],
+      leaderDons:1, activeDons:0,
+      leaderRested:false
+    },
+    p2:{
+      life:2,
+      handCount:3, handCounter:3000,
+      fieldChars:[],
+      leaderRested:false
+    },
+    battleTurn:6, p1First:true,
+    optimalSolution:[
+      'ゴロー(3000+DON×2=5000)でアタック → 相手1000カウンターで6000防御成立、手札カウンター-1000',
+      '神兵(5000+DON×1=6000)でアタック → 相手1000カウンターで6000同値 防御不成立、ライフ2→1',
+      'エネル(5000+DON×1=6000)でアタック → 残1000カウンターで6000同値、防御不成立、ライフ1→0で勝利'
+    ]
+  },
+  {
+    id:'sc3',
+    title:'雷迎・八連弾',
+    difficulty:'難',
+    description:'アクティブDON5を最適配分。3アタックで貫通せよ。誤配分で1点足りなくなる。',
+    hint:'最大カウンター2000を中型に吸わせ、最後にDON集中の8000で押し切る。',
+    p1:{
+      life:1,
+      hand:['OP15-064'],
+      fieldChars:[
+        {slot:0,cardId:'OP15-073',dons:0,rested:false},
+        {slot:1,cardId:'OP15-070',dons:0,rested:false}
+      ],
+      leaderDons:0, activeDons:5,
+      leaderRested:false
+    },
+    p2:{
+      life:2,
+      handCount:4, handCounter:5000,
+      fieldChars:[],
+      leaderRested:false
+    },
+    battleTurn:7, p1First:true,
+    optimalSolution:[
+      'フザ(5000)+DON×1=6000でアタック → 相手2000カウンターで7000防御成立、手札カウンター-2000',
+      'ヤマ(6000)+DON×1=7000でアタック → 相手1000+1000=2000カウンターで7000同値、防御不成立、ライフ2→1',
+      'エネル(5000)+DON×3=8000でアタック → 残カウンター1000で6000、貫通でライフ1→0勝利'
+    ]
+  }
+];
+
+var scenarioActive=null; // 現在ロード中シナリオ
+function scOpen(){
+  var ov=document.getElementById('scOverlay');
+  if(!ov)return;
+  scRenderList();
+  ov.classList.add('open');
+}
+function scClose(){
+  var ov=document.getElementById('scOverlay');
+  if(ov)ov.classList.remove('open');
+}
+function scRenderList(){
+  var list=document.getElementById('scList');
+  if(!list)return;
+  list.innerHTML=SCENARIOS.map(function(s){
+    return '<div class="sc-card" data-sc-id="'+s.id+'">'
+      +'<div class="sc-hd"><span class="sc-diff sc-diff-'+s.difficulty+'">'+s.difficulty+'</span><span class="sc-title">'+s.title+'</span></div>'
+      +'<div class="sc-desc">'+s.description+'</div>'
+    +'</div>';
+  }).join('');
+  list.querySelectorAll('[data-sc-id]').forEach(function(el){
+    var t=false;
+    el.addEventListener('touchend',function(e){e.preventDefault();e.stopPropagation();t=true;scLoad(el.getAttribute('data-sc-id'));setTimeout(function(){t=false;},300);},{passive:false});
+    el.addEventListener('click',function(){if(!t)scLoad(el.getAttribute('data-sc-id'));});
+  });
+}
+function scFindCardInfo(cid){
+  for(var i=0;i<DP_CARDS.length;i++)if(DP_CARDS[i].id===cid)return DP_CARDS[i];
+  return null;
+}
+function scLoad(id){
+  var sc=SCENARIOS.find(function(x){return x.id===id;});
+  if(!sc)return;
+  scenarioActive=sc;
+  // 全状態リセット
+  testCards=[];
+  dpState={p1:{deck:[],trash:[],hand:[]},p2:{deck:[],trash:[],hand:[]}};
+  p1Deck={id:'sc_p1',name:'エネルデッキ',leader:'sc_eneru',deck:{},colors:['黄']};
+  p2Deck={id:'sc_p2',name:'相手デッキ',leader:'sc_eneru',deck:{},colors:['黄']};
+  cards=[{id:'sc_eneru',name:'エネル',type:'leader',color:'黄',colors:['黄'],life:5,power:'5000',image:null}];
+  p1First=sc.p1First!==false;
+  battleTurn=sc.battleTurn||1;battleWho='先';
+  undoHistory=[];
+  turnLogReset();
+
+  // showBattleDemo相当の初期化
+  donState.p1={deck:0,active:sc.p1.activeDons||0,rest:0,leader:sc.p1.leaderDons||0,char:[0,0,0,0,0],max:10};
+  donState.p2={deck:0,active:0,rest:0,leader:0,char:[0,0,0,0,0],max:10};
+  // P2のキャラのDONも反映（fieldCharsに含まれる場合）
+  (sc.p1.fieldChars||[]).forEach(function(fc){if(fc.dons)donState.p1.char[fc.slot]=fc.dons;});
+  (sc.p2.fieldChars||[]).forEach(function(fc){if(fc.dons)donState.p2.char[fc.slot]=fc.dons;});
+
+  // リーダー testCards
+  ldrRested.p1=!!sc.p1.leaderRested;
+  ldrRested.p2=!!sc.p2.leaderRested;
+  testCards.push({id:'leader_p1',name:'エネル',img:'',power:'5000',cost:0,counter:0,rested:false,donCount:0,loc:'leader_p1',modCost:0,modPower:0,sAtk:false,sAct:false,sEff:false,locked:false});
+  testCards.push({id:'leader_p2',name:'エネル',img:'',power:'5000',cost:0,counter:0,rested:false,donCount:0,loc:'leader_p2',modCost:0,modPower:0,sAtk:false,sAct:false,sEff:false,locked:false});
+
+  // P1 手札
+  (sc.p1.hand||[]).forEach(function(cid,i){
+    var info=scFindCardInfo(cid)||{name:cid,power:'',cost:0,counter:0};
+    testCards.push({id:'sc_p1h_'+i,name:info.name,img:info.img||'',power:info.power||'',cost:info.cost,counter:info.counter,rested:false,donCount:0,loc:'hand'});
+  });
+  // P2 手札（プレースホルダ枚数 + カウンター合計を均等配分）
+  var p2HandCnt=sc.p2.handCount||0;
+  var p2TotalCtr=sc.p2.handCounter||0;
+  var perCard=p2HandCnt>0?Math.floor(p2TotalCtr/p2HandCnt):0;
+  var rest=p2HandCnt>0?p2TotalCtr-perCard*p2HandCnt:0;
+  for(var k=0;k<p2HandCnt;k++){
+    var ctr=perCard+(k<rest?1000:0);
+    // 残余を 1000刻みで先頭から配分（端数なら +1000 ずつ）
+    testCards.push({id:'sc_p2h_'+k,name:'手札'+(k+1),img:'',power:'',cost:0,counter:ctr,rested:false,donCount:0,loc:'hand_p2'});
+  }
+  // P1 フィールド
+  (sc.p1.fieldChars||[]).forEach(function(fc){
+    var info=scFindCardInfo(fc.cardId)||{name:fc.cardId,power:'',cost:0,counter:0};
+    testCards.push({id:'sc_p1f_'+fc.slot,name:info.name,img:info.img||'',power:info.power||'',cost:info.cost,counter:info.counter,rested:!!fc.rested,donCount:0,loc:'field_p1_'+fc.slot,modCost:0,modPower:0,sAtk:false,sAct:false,sEff:false,locked:false});
+  });
+  // P2 フィールド
+  (sc.p2.fieldChars||[]).forEach(function(fc){
+    var info=scFindCardInfo(fc.cardId)||{name:fc.cardId,power:'',cost:0,counter:0};
+    testCards.push({id:'sc_p2f_'+fc.slot,name:info.name,img:info.img||'',power:info.power||'',cost:info.cost,counter:info.counter,rested:!!fc.rested,donCount:0,loc:'field_p2_'+fc.slot,modCost:0,modPower:0,sAtk:false,sAct:false,sEff:false,locked:false});
+  });
+  // ライフ
+  lifeCardFace={p1:[],p2:[]};
+  lifeCardsData={p1:[],p2:[]};
+  for(var li=0;li<sc.p1.life;li++){lifeCardFace.p1.push(false);lifeCardsData.p1.push({id:'sc_p1l_'+li,name:'LIFE',img:''});}
+  for(var lj=0;lj<sc.p2.life;lj++){lifeCardFace.p2.push(false);lifeCardsData.p2.push({id:'sc_p2l_'+lj,name:'LIFE',img:''});}
+
+  scClose();
+  showScr('scrBattle');
+  donInitDone=false;
+  initDonSystem();
+  renderDonState('p1');renderDonState('p2');
+  renderLifeMarks('p1LifeMarks',lifeCardFace.p1.length);
+  renderLifeMarks('p2LifeMarks',lifeCardFace.p2.length);
+  setupDropZones();
+  ['p1','p2'].forEach(function(p){
+    setupLeaderTap(p);
+    setupDeckDrag(p);
+    setupLifeDrag(p);
+    var lz=document.getElementById(p+'LeaderZone');
+    if(lz){
+      lz.innerHTML='';
+      var pb=document.createElement('div');pb.className='power-badge';pb.textContent='5000';
+      lz.appendChild(pb);
+      lz.classList.toggle('ldr-rested',ldrRested[p]);
+    }
+    var bdc=document.getElementById(p+'DeckCnt');if(bdc)bdc.textContent='0';
+  });
+  renderHand();renderField();
+  updateTurnChip();
+  turnLogStart(battleTurn,battleWho);
+  scShowOverlay();
+}
+function scShowOverlay(){
+  if(!scenarioActive)return;
+  var ov=document.getElementById('scInGameOverlay');
+  if(!ov)return;
+  var content=document.getElementById('scInGameContent');
+  content.innerHTML='<div class="sc-ig-title">'
+      +'<span class="sc-diff sc-diff-'+scenarioActive.difficulty+'">'+scenarioActive.difficulty+'</span>'
+      +scenarioActive.title+'</div>'
+    +'<div class="sc-ig-desc">'+scenarioActive.description+'</div>'
+    +'<div class="sc-ig-btns">'
+      +'<button class="sc-ig-btn sc-btn-hint" id="scBtnHint">💡 ヒント</button>'
+      +'<button class="sc-ig-btn sc-btn-sol" id="scBtnSolution">📖 解答</button>'
+      +'<button class="sc-ig-btn sc-btn-quit" id="scBtnQuit">退出</button>'
+    +'</div>'
+    +'<div class="sc-ig-hint-box" id="scHintBox" style="display:none"></div>';
+  ov.style.display='flex';
+  document.getElementById('scBtnHint').addEventListener('click',function(){
+    var box=document.getElementById('scHintBox');
+    box.innerHTML='<strong>💡 ヒント:</strong> '+scenarioActive.hint;
+    box.style.display='block';
+  });
+  document.getElementById('scBtnSolution').addEventListener('click',function(){
+    var box=document.getElementById('scHintBox');
+    box.innerHTML='<strong>📖 正解手順:</strong><ol>'
+      +scenarioActive.optimalSolution.map(function(s){return '<li>'+s+'</li>';}).join('')
+    +'</ol>';
+    box.style.display='block';
+  });
+  document.getElementById('scBtnQuit').addEventListener('click',function(){
+    scQuit();
+  });
+}
+function scHideOverlay(){
+  var ov=document.getElementById('scInGameOverlay');
+  if(ov)ov.style.display='none';
+}
+function scQuit(){
+  scenarioActive=null;
+  scHideOverlay();
+  // exit同様に状態クリア
+  undoHistory=[];battleTurn=1;battleWho='先';
+  testCards=[];dpState={p1:{deck:[],trash:[],hand:[]},p2:{deck:[],trash:[],hand:[]}};
+  donInitDone=false;
+  turnLogReset();
+  showScr('scrSelect');
+}
 
 // ══════ CONSTANTS ══════
 const CM={赤:'#ef4444',青:'#3b82f6',緑:'#22c55e',黄:'#f59e0b',紫:'#a855f7',黒:'#6b7280'};
@@ -1864,6 +2221,10 @@ function showBattleDemo(){
   donInitDone=false;
   initDonSystem();
 
+  // ① ターンログ：先攻1ターン開始時にログを初期化
+  turnLogReset();
+  turnLogStart(1,'先');
+
   showScr('scrBattle');
 }
 function renderLifeRow(elId,count){
@@ -1941,7 +2302,10 @@ function updateTurnChip(){
 }
 function nextTurn(){
   saveState();
+  // ① ターンログ：現ターン終了 → 次ターン開始
+  turnLogEnd();
   if(battleWho==='先'){battleWho='後';}else{battleWho='先';battleTurn++;}
+  turnLogStart(battleTurn,battleWho);
 
   // 現在のターンのプレイヤーを判定
   var isP1Now=(battleWho==='先'&&p1First)||(battleWho==='後'&&!p1First);
@@ -3604,6 +3968,81 @@ function moveCard(id,targetEl){
 }
 
 // ══════════════════════════════════════════════════════
+// ① ターンログ & 振り返り
+//   各ターンの開始/終了タイムスタンプ、経過時間、メモを記録。
+//   ターンバーの ↺ ボタンで開く。
+// ══════════════════════════════════════════════════════
+var turnLog=[]; // [{turn,who,start,end,duration,memo}]
+function turnLogReset(){turnLog=[];}
+function turnLogStart(turn,who){
+  turnLog.push({turn:turn,who:who,start:Date.now(),end:null,duration:0,memo:''});
+}
+function turnLogEnd(){
+  var cur=turnLog[turnLog.length-1];
+  if(!cur||cur.end)return;
+  cur.end=Date.now();
+  cur.duration=cur.end-cur.start;
+}
+function turnLogCurrentEntry(){
+  return turnLog.length?turnLog[turnLog.length-1]:null;
+}
+function tlFormatDuration(ms){
+  if(!ms||ms<0)return '00:00';
+  var sec=Math.floor(ms/1000);
+  var m=Math.floor(sec/60),s=sec%60;
+  return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+}
+function tlOpen(){
+  // 現ターンの経過時間を一旦表示用に確定（実体はまだ閉じない）
+  var ov=document.getElementById('tlOverlay');
+  if(!ov)return;
+  tlRender();
+  ov.classList.add('open');
+}
+function tlClose(){
+  var ov=document.getElementById('tlOverlay');
+  if(ov)ov.classList.remove('open');
+}
+function tlRender(){
+  var listEl=document.getElementById('tlList');
+  var curEl=document.getElementById('tlCurrent');
+  if(!listEl||!curEl)return;
+  var cur=turnLogCurrentEntry();
+  // 現ターン
+  if(cur){
+    var elapsed=cur.end?cur.duration:(Date.now()-cur.start);
+    curEl.innerHTML='<div class="tl-cur-hd">CURRENT</div>'
+      +'<div class="tl-cur-info"><span class="tl-turn">T'+cur.turn+'</span><span class="tl-who '+(cur.who==='先'?'sen':'go')+'">'+cur.who+'攻</span><span class="tl-dur">'+tlFormatDuration(elapsed)+'</span></div>'
+      +'<textarea class="tl-memo-input" id="tlCurMemo" placeholder="このターンの気づき・反省点を記録..." rows="2">'+(cur.memo||'').replace(/</g,'&lt;')+'</textarea>';
+    var ta=document.getElementById('tlCurMemo');
+    if(ta){
+      ta.addEventListener('input',function(e){cur.memo=e.target.value;});
+    }
+  }else{
+    curEl.innerHTML='<div class="tl-cur-hd">バトル未開始</div>';
+  }
+  // 履歴（現ターン以外を新しい順）
+  var hist=turnLog.slice(0,Math.max(0,turnLog.length-1)).reverse();
+  if(hist.length===0){
+    listEl.innerHTML='<div class="tl-empty">過去ターンなし</div>';
+    return;
+  }
+  listEl.innerHTML=hist.map(function(e,idx){
+    var realIdx=turnLog.length-2-idx;
+    return '<div class="tl-row">'
+      +'<div class="tl-row-hd"><span class="tl-turn">T'+e.turn+'</span><span class="tl-who '+(e.who==='先'?'sen':'go')+'">'+e.who+'攻</span><span class="tl-dur">'+tlFormatDuration(e.duration)+'</span></div>'
+      +'<textarea class="tl-memo-input" data-tl-idx="'+realIdx+'" placeholder="メモを追加..." rows="1">'+(e.memo||'').replace(/</g,'&lt;')+'</textarea>'
+    +'</div>';
+  }).join('');
+  listEl.querySelectorAll('[data-tl-idx]').forEach(function(ta){
+    ta.addEventListener('input',function(e){
+      var i=parseInt(e.target.getAttribute('data-tl-idx'));
+      if(turnLog[i])turnLog[i].memo=e.target.value;
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════
 // ATTACK CALC（攻撃シミュレーション）
 //   ターン中、リーダー＋アクティブキャラのアタック回数と
 //   合計パワーを試算するモーダル。
@@ -3748,6 +4187,7 @@ function atkToggleSick(spec){
   // 召喚酔いONにしたら sim_don は 0 にして残DONプールに戻す
   if(a.sick)a.sim_don=0;
   atkRenderPlayer(p);
+  atkRenderDefense();
 }
 function atkAdjustDon(spec){
   var parts=spec.split(':');var p=parts[0],key=parts[1],delta=parseInt(parts[2]);
@@ -3757,12 +4197,77 @@ function atkAdjustDon(spec){
   if(delta<0&&a.sim_don<=0)return;
   a.sim_don+=delta;
   atkRenderPlayer(p);
+  atkRenderDefense();
 }
+
+// ⑦ ライフ受け判断アシスト：相手の各攻撃に対し、必要カウンターを計算
+function atkDefenderInfo(p){
+  var lc=testCards.find(function(x){return x.id==='leader_'+p;});
+  var lpw=lc?(parseInt(lc.power)||5000)+(lc.modPower||0):5000;
+  var life=lifeCardFace[p]?lifeCardFace[p].length:0;
+  var hc=atkHandCounter(p);
+  return {leaderPower:lpw,life:life,handCounter:hc.total,handCnt:hc.handCnt,ctrCnt:hc.ctrCnt};
+}
+function atkAttackerList(p){
+  var s=atkSim[p];if(!s)return [];
+  var atks=atkAttackers(s).map(function(a){return{name:a.name,power:a.base+a.sim_don*1000};});
+  atks.sort(function(a,b){return b.power-a.power;});
+  return atks;
+}
+function atkRenderDefense(){
+  var el=document.getElementById('atkCalcDefense');
+  if(!el)return;
+  var dirs=[
+    {atkP:'p1',atkLbl:'P1',defP:'p2',defLbl:'P2'},
+    {atkP:'p2',atkLbl:'P2',defP:'p1',defLbl:'P1'}
+  ];
+  var html='<div class="ac-def-title">🛡 攻防シミュレーション</div>';
+  dirs.forEach(function(d){
+    var atks=atkAttackerList(d.atkP);
+    var defInfo=atkDefenderInfo(d.defP);
+    var pool=atkSim[d.atkP]?atkPool(atkSim[d.atkP]):0;
+    var poolNote=pool>0?'<span class="ac-def-pool">+ DON×'+pool+' 自由配分可</span>':'';
+    var totalNeeded=0;
+    var rowsHTML='';
+    atks.forEach(function(a,i){
+      var diff=a.power-defInfo.leaderPower;
+      var cls,txt;
+      if(diff<=0){cls='miss';txt='不発 (リーダー>=攻撃)';}
+      else{cls='kill';txt='必要 '+diff.toLocaleString();totalNeeded+=diff;}
+      rowsHTML+='<div class="ac-def-row">'
+        +'<div class="ac-def-rank">'+(i+1)+'</div>'
+        +'<div class="ac-def-name">'+(a.name||'')+'</div>'
+        +'<div class="ac-def-power">'+a.power.toLocaleString()+'</div>'
+        +'<div class="ac-def-needed '+cls+'">→ '+txt+'</div>'
+      +'</div>';
+    });
+    var verdict;
+    if(atks.length===0){
+      verdict='<div class="ac-def-verdict none">アタッカーなし</div>';
+    }else if(totalNeeded===0){
+      verdict='<div class="ac-def-verdict ok">✅ '+d.defLbl+'リーダー >= 全アタック / カウンター不要</div>';
+    }else if(totalNeeded<=defInfo.handCounter){
+      verdict='<div class="ac-def-verdict ok">✅ '+d.defLbl+'手札カウンター '+defInfo.handCounter.toLocaleString()+' で全防御可能 (必要 '+totalNeeded.toLocaleString()+')</div>';
+    }else{
+      var shortage=totalNeeded-defInfo.handCounter;
+      verdict='<div class="ac-def-verdict ng">❌ '+d.defLbl+'カウンター不足 '+shortage.toLocaleString()+' / 一部ライフ受け推奨</div>';
+    }
+    html+='<div class="ac-def-block">'
+      +'<div class="ac-def-hd">'+d.atkLbl+' 攻撃 → '+d.defLbl+' 防御 '+poolNote+'</div>'
+      +'<div class="ac-def-meta">'+d.defLbl+' 残ライフ '+defInfo.life+' / リーダー '+defInfo.leaderPower.toLocaleString()+' / 手札カウンター '+defInfo.handCounter.toLocaleString()+'</div>'
+      +rowsHTML
+      +verdict
+    +'</div>';
+  });
+  el.innerHTML=html;
+}
+
 function atkCalcOpen(){
   atkSim.p1=atkBuildSim('p1');
   atkSim.p2=atkBuildSim('p2');
   atkRenderPlayer('p1');
   atkRenderPlayer('p2');
+  atkRenderDefense();
   document.getElementById('atkCalcOverlay').classList.add('open');
 }
 function atkCalcClose(){
@@ -3864,6 +4369,24 @@ document.addEventListener('DOMContentLoaded',function(){
     atkOv.addEventListener('touchend',function(e){if(e.target===atkOv){e.preventDefault();atkOvT=true;atkCalcClose();setTimeout(function(){atkOvT=false;},300);}},{passive:false});
     atkOv.addEventListener('click',function(e){if(!atkOvT&&e.target===atkOv)atkCalcClose();});
   }
+  // ターンログ
+  bindBtn('btnTurnLog', tlOpen);
+  bindBtn('tlClose', tlClose);
+  var tlOv=document.getElementById('tlOverlay');
+  if(tlOv){
+    var tlOvT=false;
+    tlOv.addEventListener('touchend',function(e){if(e.target===tlOv){e.preventDefault();tlOvT=true;tlClose();setTimeout(function(){tlOvT=false;},300);}},{passive:false});
+    tlOv.addEventListener('click',function(e){if(!tlOvT&&e.target===tlOv)tlClose();});
+  }
+  // シナリオ選択
+  bindBtn('btnScenarioOpen', scOpen);
+  bindBtn('scClose', scClose);
+  var scOv=document.getElementById('scOverlay');
+  if(scOv){
+    var scOvT=false;
+    scOv.addEventListener('touchend',function(e){if(e.target===scOv){e.preventDefault();scOvT=true;scClose();setTimeout(function(){scOvT=false;},300);}},{passive:false});
+    scOv.addEventListener('click',function(e){if(!scOvT&&e.target===scOv)scClose();});
+  }
 
   // ✕ボタン → 確認モーダル
   bindBtn('btnExitBattle', function(){
@@ -3878,6 +4401,9 @@ document.addEventListener('DOMContentLoaded',function(){
     undoHistory=[];battleTurn=1;battleWho='先';
     testCards=[];dpState={p1:{deck:[],trash:[],hand:[]},p2:{deck:[],trash:[],hand:[]}};
     donInitDone=false;
+    turnLogReset();
+    scenarioActive=null;
+    scHideOverlay();
     showScr('scrSelect');
   });
 
@@ -4132,6 +4658,34 @@ document.addEventListener('DOMContentLoaded',function(){
   </div>
 </div>
 
+<!-- ═══ SCENARIO LIST MODAL ═══ -->
+<div id="scOverlay">
+  <div id="scPanel">
+    <div id="scHd">
+      <div id="scTitle">📚 SCENARIO<div id="scTitleSub">詰めワンピース / 練習問題</div></div>
+      <button id="scClose">✕</button>
+    </div>
+    <div id="scList"></div>
+  </div>
+</div>
+
+<!-- ═══ SCENARIO IN-GAME OVERLAY ═══ -->
+<div id="scInGameOverlay">
+  <div id="scInGameContent"></div>
+</div>
+
+<!-- ═══ TURN LOG POPUP ═══ -->
+<div id="tlOverlay">
+  <div id="tlPanel">
+    <div id="tlHd">
+      <div id="tlTitle">↺ TURN LOG</div>
+      <button id="tlClose">✕</button>
+    </div>
+    <div id="tlCurrent"></div>
+    <div id="tlList"></div>
+  </div>
+</div>
+
 <!-- ═══ ATTACK CALC POPUP ═══ -->
 <div id="atkCalcOverlay">
   <div id="atkCalcPanel">
@@ -4141,7 +4695,8 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
     <div id="atkCalcP1" class="ac-player"></div>
     <div id="atkCalcP2" class="ac-player"></div>
-    <div class="ac-foot">基礎パワー + 付与DON×1000 + 残DON×1000<br>「💤」= 召喚酔い設定（このターンのみ・計算から除外）</div>
+    <div id="atkCalcDefense"></div>
+    <div class="ac-foot">基礎パワー + 付与DON×1000 + 残DON×1000<br>「💤」= 召喚酔い設定（このターンのみ・計算から除外）<br>🛡 = 攻撃 vs 相手リーダーで必要なカウンター値</div>
   </div>
 </div>
 </body>
