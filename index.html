@@ -49,6 +49,16 @@
               - 盤面（手札・フィールド・DON・ライフ）を自動セット
               - バトル画面上部に問題説明 + ヒント/解答ボタン
               - 「退出」で通常画面に戻る
+     ★ v1.8 攻撃順序最適化:
+       [Feat6] ⑤ アタックパターン総当たり / 最適化
+              - Attack Sim 下部に「⚔ アタックパターン総当たり / 最適化」を追加
+              - 現在の sim_don 配分から 2^N - 1 通りの非空 subset を全列挙
+              - 防御側は「最適 (cheapest先ブロック)」想定で各 outcome を計算
+              - ソート: through DESC → counterUsed DESC → subsetSize ASC
+              - 「🎯 最適パターン」を強調表示、推奨アタック順序(パワー降順) +
+                各攻撃の「通過/ブロック/不発」ラベル
+              - 全パターンを折りたたみリストで上位30件まで閲覧可能
+              - サブエージェントで生成したテストケース5件で挙動を検証
 -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -624,6 +634,49 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 .ac-def-verdict.ng{background:rgba(220,38,38,.12);color:#f87171;border:1px solid rgba(220,38,38,.35);}
 .ac-def-verdict.none{background:rgba(255,255,255,.04);color:#5a6a84;border:1px solid rgba(255,255,255,.08);}
 
+/* ⑤ アタックパターン総当たり / 最適化 */
+#atkCalcOptimize{padding:0 14px 4px;}
+.ac-opt-title{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:#d4a820;padding:14px 0 8px;border-top:1px solid rgba(212,168,32,.18);margin-top:4px;}
+.ac-opt-block{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:10px;margin-bottom:8px;}
+.ac-opt-hd{font-size:11px;font-weight:900;color:#dde4f0;margin-bottom:3px;}
+.ac-opt-meta{font-size:10px;color:#8a8070;font-family:'DM Mono',monospace;margin-bottom:8px;}
+.ac-opt-empty{font-size:11px;color:#5a6a84;text-align:center;padding:10px;}
+.ac-opt-best{background:rgba(212,168,32,.08);border:1px dashed rgba(212,168,32,.4);border-radius:8px;padding:8px 10px;margin-bottom:8px;}
+.ac-opt-best-tag{font-family:'DM Mono',monospace;font-size:9px;color:#d4a820;letter-spacing:1px;margin-bottom:5px;}
+.ac-opt-best-list{display:flex;flex-wrap:wrap;gap:5px;}
+.ac-opt-card{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 8px;border-radius:14px;border:1px solid;}
+.ac-opt-card.thr{background:rgba(220,38,38,.12);color:#f87171;border-color:rgba(220,38,38,.4);}
+.ac-opt-card.blk{background:rgba(37,99,235,.12);color:#93c5fd;border-color:rgba(37,99,235,.35);}
+.ac-opt-card.mis{background:rgba(120,120,120,.1);color:#8a8a8a;border-color:rgba(120,120,120,.3);}
+.ac-opt-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:4px;}
+.ac-opt-stat{background:rgba(255,255,255,.03);border-radius:6px;padding:6px 4px;text-align:center;}
+.ac-opt-lbl{font-size:8px;color:#8a8070;font-family:'DM Mono',monospace;letter-spacing:.5px;margin-bottom:2px;}
+.ac-opt-val{font-family:'Bebas Neue',sans-serif;font-size:13px;color:#dde4f0;letter-spacing:1px;}
+.ac-opt-val.hi{color:#f87171;}
+.ac-opt-seq{margin-top:8px;padding:8px;background:rgba(255,255,255,.02);border-radius:6px;}
+.ac-opt-seq-title{font-size:9px;color:#8a8070;font-family:'DM Mono',monospace;letter-spacing:1px;margin-bottom:5px;}
+.ac-opt-seq-row{display:flex;align-items:center;gap:6px;font-size:10px;padding:3px 0;}
+.ac-opt-seq-no{width:16px;height:16px;border-radius:50%;background:rgba(212,168,32,.18);color:#d4a820;font-family:'Bebas Neue',sans-serif;font-size:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ac-opt-seq-name{flex:1;color:#dde4f0;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ac-opt-seq-pow{font-family:'Bebas Neue',sans-serif;font-size:11px;color:#dde4f0;letter-spacing:.5px;min-width:50px;text-align:right;}
+.ac-opt-seq-act{font-family:'DM Mono',monospace;font-size:9px;min-width:80px;text-align:right;}
+.ac-opt-seq-act.thr{color:#f87171;font-weight:900;}
+.ac-opt-seq-act.blk{color:#93c5fd;}
+.ac-opt-seq-act.mis{color:#5a6a84;}
+.ac-opt-details{margin-top:6px;}
+.ac-opt-details summary{cursor:pointer;font-size:10px;color:#8a8070;padding:5px 8px;border-radius:6px;background:rgba(255,255,255,.03);font-family:'DM Mono',monospace;letter-spacing:.5px;list-style:none;}
+.ac-opt-details summary::-webkit-details-marker{display:none;}
+.ac-opt-details summary::before{content:'▶ ';transition:transform .15s;}
+.ac-opt-details[open] summary::before{content:'▼ ';}
+.ac-opt-details summary:active{background:rgba(255,255,255,.07);}
+.ac-opt-rank-list{margin-top:6px;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.ac-opt-rank{display:flex;align-items:center;gap:6px;font-size:10px;padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.04);border-radius:4px;}
+.ac-opt-rank.best{background:rgba(212,168,32,.08);border-left:2px solid #d4a820;}
+.ac-opt-rank-no{width:22px;font-family:'Bebas Neue',sans-serif;font-size:11px;color:#d4a820;text-align:center;flex-shrink:0;}
+.ac-opt-rank-atk{flex:1;color:#dde4f0;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ac-opt-rank-res{font-family:'DM Mono',monospace;font-size:9px;color:#8a8070;flex-shrink:0;}
+.ac-opt-rank-res .thr-n{color:#f87171;font-weight:900;}
+
 /* ═══ ① TURN LOG ═══ */
 #tlOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:340;align-items:center;justify-content:center;padding:12px;}
 #tlOverlay.open{display:flex}
@@ -809,7 +862,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Noto Sa
 <div class="scr act" id="scrSelect">
   <div class="hd">
     <div class="logo"><em>OP</em>·TCG BATTLE</div>
-    <div class="logo-ver">SOLO v1.7</div>
+    <div class="logo-ver">SOLO v1.8</div>
   </div>
   <div class="body">
     <div class="pad">
@@ -4188,6 +4241,7 @@ function atkToggleSick(spec){
   if(a.sick)a.sim_don=0;
   atkRenderPlayer(p);
   atkRenderDefense();
+  atkRenderOptimize();
 }
 function atkAdjustDon(spec){
   var parts=spec.split(':');var p=parts[0],key=parts[1],delta=parseInt(parts[2]);
@@ -4198,6 +4252,7 @@ function atkAdjustDon(spec){
   a.sim_don+=delta;
   atkRenderPlayer(p);
   atkRenderDefense();
+  atkRenderOptimize();
 }
 
 // ⑦ ライフ受け判断アシスト：相手の各攻撃に対し、必要カウンターを計算
@@ -4262,12 +4317,171 @@ function atkRenderDefense(){
   el.innerHTML=html;
 }
 
+// ⑤ アタックパターン総当たり / 最適化
+//   現在の sim_don 配分で 2^N - 1 通りの非空 subset を列挙し、
+//   防御側を「最適 (必要小→大の順でブロック)」と仮定して各 outcome を計算。
+//   ソート: through DESC → counterUsed DESC → subsetSize ASC
+//   1位を「最適パターン」、全候補は折りたたみで表示。
+function atkPatternOptimize(atkP,defP){
+  var s=atkSim[atkP];
+  if(!s)return null;
+  var attackers=atkAttackers(s).map(function(a){
+    return {name:a.name,power:a.base+a.sim_don*1000};
+  });
+  var pool=atkPool(s);
+  var defInfo=atkDefenderInfo(defP);
+  var D=defInfo.leaderPower;
+  var C=defInfo.handCounter;
+  var n=attackers.length;
+  if(n===0)return null;
+  // 上限ガード（万一の念のため。N=10 で 2^10=1024 通り、十分軽量）
+  if(n>14)return null;
+
+  var results=[];
+  for(var mask=1;mask<(1<<n);mask++){
+    var subset=[];
+    for(var i=0;i<n;i++){if(mask&(1<<i))subset.push(attackers[i]);}
+    // 有効攻撃 = power > D のもの。それ以外は inherent fail
+    var valid=subset.filter(function(a){return a.power>D;});
+    var fails=subset.length-valid.length;
+    var needed=valid.map(function(a){return a.power-D;}).slice().sort(function(a,b){return a-b;});
+    // 防御側最適：cheapest needed から順にブロック
+    var remaining=C;
+    var blocked=0;
+    for(var k=0;k<needed.length;k++){
+      if(remaining>=needed[k]){remaining-=needed[k];blocked++;}
+      else break;
+    }
+    var through=valid.length-blocked;
+    results.push({
+      mask:mask,subset:subset,subsetSize:subset.length,
+      validCount:valid.length,inherentFails:fails,
+      blocked:blocked,through:through,
+      counterUsed:C-remaining,counterRemaining:remaining
+    });
+  }
+  // ソート: through DESC → counterUsed DESC → subsetSize ASC → mask ASC (安定化)
+  results.sort(function(a,b){
+    if(b.through!==a.through)return b.through-a.through;
+    if(b.counterUsed!==a.counterUsed)return b.counterUsed-a.counterUsed;
+    if(a.subsetSize!==b.subsetSize)return a.subsetSize-b.subsetSize;
+    return a.mask-b.mask;
+  });
+  return {attackers:attackers,defLeader:D,defCounter:C,pool:pool,results:results};
+}
+
+// 攻撃順序のシミュレーション結果を構築（表示用）
+//   最適パターンの subset を「パワー降順」で並べ、各アタックの「通過/ブロック/不発」を決定。
+//   防御側は最適防御なので「必要カウンター小→大」で先にブロックされる。
+//   表示順は「パワー降順」だが、ブロック判定は subset 全体のグループ判定に基づく。
+function atkSequenceAnnotate(subset,D,C){
+  // パワー降順でソートしたコピー
+  var ordered=subset.slice().sort(function(a,b){return b.power-a.power;});
+  // 各攻撃に needed/idx を付与
+  var anno=ordered.map(function(a,i){
+    return {name:a.name,power:a.power,needed:Math.max(0,a.power-D),act:''};
+  });
+  // 不発確定
+  anno.forEach(function(x){if(x.needed===0)x.act='mis';});
+  // 防御側がブロックするのは「needed > 0 のなかで小さい順」
+  var blockable=anno.filter(function(x){return x.needed>0;}).slice().sort(function(a,b){return a.needed-b.needed;});
+  var remaining=C;
+  blockable.forEach(function(x){
+    if(x.needed===0)return;
+    if(remaining>=x.needed){x.act='blk';remaining-=x.needed;}
+    else{x.act='thr';}
+  });
+  // anno は ordered の参照と同じオブジェクトなので、ここまでの mutate で完成
+  return {sequence:anno,counterRemaining:remaining};
+}
+
+function atkRenderOptimize(){
+  var el=document.getElementById('atkCalcOptimize');
+  if(!el)return;
+  var html='<div class="ac-opt-title">⚔ アタックパターン総当たり / 最適化</div>';
+  var dirs=[
+    {atkP:'p1',defP:'p2',atkLbl:'P1',defLbl:'P2'},
+    {atkP:'p2',defP:'p1',atkLbl:'P2',defLbl:'P1'}
+  ];
+  dirs.forEach(function(d){
+    var opt=atkPatternOptimize(d.atkP,d.defP);
+    html+='<div class="ac-opt-block">';
+    html+='<div class="ac-opt-hd">'+d.atkLbl+' → '+d.defLbl+'</div>';
+    if(!opt||!opt.results.length){
+      html+='<div class="ac-opt-empty">アタッカーなし</div></div>';
+      return;
+    }
+    var poolNote=opt.pool>0?(' / 残DON '+opt.pool+' (手動配分→上で+/-)'):'';
+    html+='<div class="ac-opt-meta">相手リーダー '+opt.defLeader.toLocaleString()+' / カウンター '+opt.defCounter.toLocaleString()+poolNote+'</div>';
+
+    var best=opt.results[0];
+    // 最適 subset を power 降順で並べてシーケンス注釈
+    var seq=atkSequenceAnnotate(best.subset,opt.defLeader,opt.defCounter);
+    var bestSubset=best.subset.slice().sort(function(a,b){return b.power-a.power;});
+
+    // 最適パターン要約
+    html+='<div class="ac-opt-best"><div class="ac-opt-best-tag">🎯 最適パターン</div><div class="ac-opt-best-list">';
+    bestSubset.forEach(function(a){
+      var diff=a.power-opt.defLeader;
+      var cls=diff<=0?'mis':'thr';
+      html+='<span class="ac-opt-card '+cls+'">'+(a.name||'?')+' '+a.power.toLocaleString()+'</span>';
+    });
+    html+='</div></div>';
+
+    // 統計4列
+    html+='<div class="ac-opt-stats">'
+      +'<div class="ac-opt-stat"><div class="ac-opt-lbl">通過</div><div class="ac-opt-val'+(best.through>0?' hi':'')+'">'+best.through+'</div></div>'
+      +'<div class="ac-opt-stat"><div class="ac-opt-lbl">ライフ削減</div><div class="ac-opt-val'+(best.through>0?' hi':'')+'">-'+best.through+'</div></div>'
+      +'<div class="ac-opt-stat"><div class="ac-opt-lbl">防御消費</div><div class="ac-opt-val">'+best.counterUsed.toLocaleString()+'</div></div>'
+      +'<div class="ac-opt-stat"><div class="ac-opt-lbl">残カウンター</div><div class="ac-opt-val">'+best.counterRemaining.toLocaleString()+'</div></div>'
+    +'</div>';
+
+    // 攻撃シーケンス (個別表示)
+    html+='<div class="ac-opt-seq"><div class="ac-opt-seq-title">推奨アタック順序 (パワー降順)</div>';
+    seq.sequence.forEach(function(x,i){
+      var label,cls;
+      if(x.act==='thr'){label='通過 (+1ライフ)';cls='thr';}
+      else if(x.act==='blk'){label='ブロック (-'+x.needed.toLocaleString()+')';cls='blk';}
+      else{label='不発 (≤防御)';cls='mis';}
+      html+='<div class="ac-opt-seq-row">'
+        +'<div class="ac-opt-seq-no">'+(i+1)+'</div>'
+        +'<div class="ac-opt-seq-name">'+x.name+'</div>'
+        +'<div class="ac-opt-seq-pow">'+x.power.toLocaleString()+'</div>'
+        +'<div class="ac-opt-seq-act '+cls+'">'+label+'</div>'
+      +'</div>';
+    });
+    html+='</div>';
+
+    // 全パターン折りたたみ (上位 20 まで表示で省略)
+    var displayed=opt.results.slice(0,Math.min(opt.results.length,30));
+    html+='<details class="ac-opt-details"><summary>全パターン '+opt.results.length+'通り (上位 '+displayed.length+' 表示)</summary>';
+    html+='<div class="ac-opt-rank-list">';
+    displayed.forEach(function(r,i){
+      var atkTxt=r.subset.slice().sort(function(a,b){return b.power-a.power;}).map(function(a){
+        return a.name+'('+a.power.toLocaleString()+')';
+      }).join(' + ');
+      var hi=i===0?' best':'';
+      var thrCls=r.through>0?'thr-n':'';
+      html+='<div class="ac-opt-rank'+hi+'">'
+        +'<span class="ac-opt-rank-no">'+(i+1)+'</span>'
+        +'<span class="ac-opt-rank-atk">'+atkTxt+'</span>'
+        +'<span class="ac-opt-rank-res">通過<span class="'+thrCls+'">'+r.through+'</span> / 消費'+r.counterUsed.toLocaleString()+'</span>'
+      +'</div>';
+    });
+    html+='</div></details>';
+
+    html+='</div>'; // ac-opt-block
+  });
+  el.innerHTML=html;
+}
+
 function atkCalcOpen(){
   atkSim.p1=atkBuildSim('p1');
   atkSim.p2=atkBuildSim('p2');
   atkRenderPlayer('p1');
   atkRenderPlayer('p2');
   atkRenderDefense();
+  atkRenderOptimize();
   document.getElementById('atkCalcOverlay').classList.add('open');
 }
 function atkCalcClose(){
@@ -4696,7 +4910,8 @@ document.addEventListener('DOMContentLoaded',function(){
     <div id="atkCalcP1" class="ac-player"></div>
     <div id="atkCalcP2" class="ac-player"></div>
     <div id="atkCalcDefense"></div>
-    <div class="ac-foot">基礎パワー + 付与DON×1000 + 残DON×1000<br>「💤」= 召喚酔い設定（このターンのみ・計算から除外）<br>🛡 = 攻撃 vs 相手リーダーで必要なカウンター値</div>
+    <div id="atkCalcOptimize"></div>
+    <div class="ac-foot">基礎パワー + 付与DON×1000 + 残DON×1000<br>「💤」= 召喚酔い設定（このターンのみ・計算から除外）<br>🛡 = 攻撃 vs 相手リーダーで必要なカウンター値<br>⚔ = 全 subset 列挙 / 防御側「最適 (cheapest先ブロック)」想定</div>
   </div>
 </div>
 </body>
