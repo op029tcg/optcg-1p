@@ -4384,10 +4384,10 @@ function atkSequenceAnnotate(subset,D,C){
   // 不発確定
   anno.forEach(function(x){if(x.needed===0)x.act='mis';});
   // 防御側がブロックするのは「needed > 0 のなかで小さい順」
-  var blockable=anno.filter(function(x){return x.needed>0;}).slice().sort(function(a,b){return a.needed-b.needed;});
+  // needed > 0 のみブロック候補、cheapest 順で防御側が消費
+  var blockable=anno.filter(function(x){return x.needed>0;}).sort(function(a,b){return a.needed-b.needed;});
   var remaining=C;
   blockable.forEach(function(x){
-    if(x.needed===0)return;
     if(remaining>=x.needed){x.act='blk';remaining-=x.needed;}
     else{x.act='thr';}
   });
